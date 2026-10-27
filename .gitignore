@@ -1,0 +1,10 @@
+node_modules/
+tools/node_modules/
+.expo/
+dist/
+ios/
+android/
+*.log
+e2e/report/
+# signing passwords (EAS local credentials): never commit
+credentials.json

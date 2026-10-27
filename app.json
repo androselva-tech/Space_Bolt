@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "SpaceBolt",
+    "slug": "space-bolt",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#0e0a09",
+    "assetBundlePatterns": [
+      "assets/**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.androselva1988.spacebolt"
+    },
+    "android": {
+      "package": "com.androselva1988.spacebolt",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f2445"
+      },
+      "versionCode": 1
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png",
+      "name": "SpaceBolt",
+      "shortName": "SpaceBolt"
+    },
+    "plugins": [
+      [
+        "./plugins/withLevelPlay",
+        {
+          "childDirected": false,
+          "skAdNetworkIds": []
+        }
+      ],
+      "expo-font",
+      "expo-screen-orientation",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      "./plugins/withLandscapeEverywhere",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-native.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      "./plugins/withReleaseSigning"
+    ],
+    "icon": "./assets/icon.png",
+    "extra": {
+      "firebase": false,
+      "eas": {
+        "projectId": "6248da29-56da-4038-b4b7-96abf59f4841"
+      }
+    },
+    "owner": "androselva1988"
+  }
+}

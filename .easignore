@@ -1,0 +1,11 @@
+# What EAS uploads for a cloud build (like .gitignore, which it replaces)
+node_modules/
+tools/node_modules/
+.expo/
+dist/
+ios/
+android/
+*.log
+e2e/report/
+# signing passwords stay on this Mac (EAS reads them locally)
+credentials.json
