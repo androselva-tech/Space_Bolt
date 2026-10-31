@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, PanResponder, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { G, Line, Path } from 'react-native-svg';
+import Svg, { G, Line, Path, Polygon, Rect } from 'react-native-svg';
 import { BOLT_TURNS, gameStore, orderFor, useGame } from '../game/store';
 import { PARTS, VIEW, vehicleOf, viewBox, type PartId } from '../rocket/model';
 import { PartSvg, RocketSide } from '../rocket/RocketSvg';
@@ -45,6 +45,10 @@ export function Workshop({ u }: { u: number }) {
   const fitted = order.filter((p) => a.fitted[p]);
   const current = order[a.index] as PartId | undefined;
   const loose = fitted.find((p) => !a.fitted[p]!.locked);
+  // the first few parts show a hand: drag it up to the rocket, then tap its bolts
+  // …every time: the first two parts of each build, and for a brand-new player the first three ever
+  const everBuilt = useGame((st) => st.profile.stats.partsBuilt);
+  const learning = everBuilt < 3 || order.filter((p) => a.fitted[p]?.locked).length < 2;
 
   // dev builds: where a part belongs on screen (page coordinates), for automated play-testing
   if (__DEV__) (globalThis as { __partTarget?: unknown }).__partTarget = (part: PartId) => {
@@ -95,6 +99,24 @@ export function Workshop({ u }: { u: number }) {
             </View>
             <Prototype u={u} w={Math.min(W * (vehicle === 'rocket' ? 0.34 : 0.2), 210 * u)} />
           </View>
+          {learning && a.tray && !drag && (() => {
+            const b = sideBox(a.tray);
+            const size = trayH - 22 * u;
+            const tw = Math.min(size * 2.2, 220 * u), th = size * 0.7;
+            const k = Math.min(tw / b.W, th / b.H);
+            const from = { x: 10 * u + (b.W * k + 16 + 20 * u) / 2, y: H - trayH / 2 };
+            const to = { x: ox + (b.X + b.W / 2) * s, y: oy + (b.Y + b.H / 2) * s };
+            return <TutorialHand u={u} mode="drag" from={from} to={to} label="DRAG IT UP" W={W} H={H} />;
+          })()}
+          {learning && loose && (() => {
+            const f = a.fitted[loose]!;
+            const k = f.bolts.findIndex((t) => t < BOLT_TURNS);
+            if (k < 0) return null;
+            const [bx, by] = PARTS[loose].bolts[k];
+            const [vx, vy] = VIEW[vehicleOf(loose)].toView(bx, by);
+            const at = { x: ox + vx * s, y: oy + vy * s };
+            return <TutorialHand u={u} mode="tap" from={at} to={at} label="TAP THE BOLT" W={W} H={H} />;
+          })()}
           {drag && a.tray && <Dragged part={a.tray} x={drag.x} y={drag.y} s={s} />}
         </>
       )}
@@ -201,6 +223,86 @@ function Bolt({ part, k, turns, x, y, u }: { part: PartId; k: number; turns: num
         </View>
       )}
     </Pressable>
+  );
+}
+
+/**
+ * The teaching hand: it slides from the part in the tray up to its place on the rocket (drag), or
+ * presses a bolt (tap), over and over, until the player has built a few parts.
+ */
+function TutorialHand({ u, mode, from, to, label, W, H }: { u: number; mode: 'drag' | 'tap'; from: { x: number; y: number }; to: { x: number; y: number }; label: string; W: number; H: number }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    t.setValue(0);
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(t, { toValue: 1, duration: mode === 'drag' ? 1700 : 700, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
+      Animated.delay(mode === 'drag' ? 500 : 250),
+      Animated.timing(t, { toValue: 0, duration: 0, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [mode, from.x, from.y, to.x, to.y]);
+  // the arrow fades with the hand: in as it starts, out as it arrives (and is gone in the pause)
+  const [fade, setFade] = useState(0);
+  useEffect(() => {
+    const id = t.addListener(({ value }) => setFade(value < 0.08 ? value / 0.08 : value < 0.85 ? 1 : Math.max(0, (1 - value) / 0.15)));
+    return () => t.removeListener(id);
+  }, [t]);
+  const size = 56 * u;
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const translateX = t.interpolate({ inputRange: [0, 1], outputRange: [0, dx] });
+  const translateY = t.interpolate({ inputRange: [0, 1], outputRange: [0, dy] });
+  // a drag fades in, holds, fades out at the end; a tap dips like a press
+  const opacity = mode === 'drag' ? t.interpolate({ inputRange: [0, 0.08, 0.85, 1], outputRange: [0, 1, 1, 0] }) : 1;
+  const press = mode === 'tap' ? t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.78, 1] }) : 1;
+  // the arrow from the tray to the place: a dashed line with a head, drawn in the workshop's coordinates
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const head = 16 * u;
+  const tip = { x: to.x - ux * 30 * u, y: to.y - uy * 30 * u };
+  const start = { x: from.x + ux * 40 * u, y: from.y + uy * 40 * u };
+  const pts = `${tip.x},${tip.y} ${tip.x - ux * head - uy * head * 0.6},${tip.y - uy * head + ux * head * 0.6} ${tip.x - ux * head + uy * head * 0.6},${tip.y - uy * head - ux * head * 0.6}`;
+  return (
+    <>
+      {mode === 'drag' && (
+        <Svg pointerEvents="none" width={W} height={H} style={[StyleSheet.absoluteFill, { opacity: fade }]}>
+          <Line x1={start.x} y1={start.y} x2={tip.x - ux * head * 0.5} y2={tip.y - uy * head * 0.5} stroke="#000" strokeOpacity={0.35} strokeWidth={9 * u} strokeLinecap="round" />
+          <Line x1={start.x} y1={start.y} x2={tip.x - ux * head * 0.5} y2={tip.y - uy * head * 0.5} stroke="#fff" strokeWidth={5 * u} strokeDasharray={`${12 * u} ${9 * u}`} strokeLinecap="round" />
+          <Polygon points={pts} fill="#fff" stroke="#000" strokeOpacity={0.35} strokeWidth={2} />
+        </Svg>
+      )}
+      <View pointerEvents="none" testID="tutorial-hand" style={{ position: 'absolute', left: from.x, top: from.y, width: 0, height: 0 }}>
+        <Animated.View style={{ position: 'absolute', left: -size * 0.46, top: -size * 0.06, alignItems: 'center', opacity, transform: [{ translateX }, { translateY }, { scale: press }] }}>
+          <HandIcon size={size} />
+          <Text style={lit(13 * u, { color: '#fff', letterSpacing: 0.5, width: 140 * u, textAlign: 'center', marginTop: 2 * u })}>{label}</Text>
+        </Animated.View>
+      </View>
+    </>
+  );
+}
+
+/** A white hand with the index finger out, like a tutorial pointer: the fingertip is the top of the icon. */
+function HandIcon({ size }: { size: number }) {
+  // the same shapes twice: a thick dark pass, then white on top, so the outline wraps the whole hand
+  const shapes = (
+    <>
+      <Rect x={24} y={4} width={11} height={36} rx={5.5} />
+      <Rect x={35} y={23} width={9} height={26} rx={4.5} />
+      <Rect x={44} y={26} width={9} height={24} rx={4.5} />
+      <Rect x={52} y={31} width={8} height={19} rx={4} />
+      <Rect x={22} y={30} width={38} height={30} rx={13} />
+      <Rect x={9} y={37} width={22} height={11} rx={5.5} transform="rotate(-28 20 42)" />
+    </>
+  );
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64" style={{ transform: [{ rotate: '-12deg' }] }}>
+      <G fill="#1d1818" stroke="#1d1818" strokeWidth={6} strokeLinejoin="round">{shapes}</G>
+      <G fill="#fff">{shapes}</G>
+      <G stroke="#1d1818" strokeOpacity={0.35} strokeWidth={1.6} strokeLinecap="round">
+        <Line x1={35} y1={40} x2={35} y2={50} />
+        <Line x1={44} y1={42} x2={44} y2={52} />
+      </G>
+    </Svg>
   );
 }
 
